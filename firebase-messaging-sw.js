@@ -25,11 +25,16 @@ messaging.onBackgroundMessage(payload => {
         body,
         icon:               '/BimboSafex/icons/icon-192.png',
         badge:              '/BimboSafex/icons/icon-72.png',
-        vibrate:            [1000, 500, 1000, 500, 2000],
+        vibrate:            [2000, 1000, 2000, 1000, 2000],
         requireInteraction: true,
         tag:                'bimbosafe-emergency',
         renotify:           true,
-        data:               { url: mapsUrl }
+        silent:             false,
+        data:               { url: mapsUrl },
+        actions: [
+            { action: 'open',    title: '🗺️ Apri Maps' },
+            { action: 'dismiss', title: '✅ OK' }
+        ]
     });
 });
 
@@ -106,10 +111,16 @@ async function checkEmergency() {
 }
 
 async function checkConnection() {
-    // Heartbeat — aggiorna presenza su Firebase
     try {
         const myId = await getFromIDB('myId');
+
+        // 1. Salva timestamp heartbeat in cache
+        const cache = await caches.open('bimbosafe-cache');
+        await cache.put('/last-heartbeat', new Response(Date.now().toString()));
+
         if (!myId) return;
+
+        // 2. Aggiorna presenza su Firebase
         await fetch(
             `https://bimbosafe-1-default-rtdb.firebaseio.com/signaling/${myId}.json`,
             {
@@ -118,7 +129,14 @@ async function checkConnection() {
                 body: JSON.stringify({ online: true, ts: Date.now() })
             }
         );
-    } catch(e) {}
+
+        // 3. Controlla inbox per emergenze non lette
+        await checkInbox();
+
+        console.log('[SW] Heartbeat OK — ', new Date().toLocaleTimeString());
+    } catch(e) {
+        console.log('[SW] Heartbeat error:', e.message);
+    }
 }
 
 // ==================== INDEXEDDB HELPER ====================
